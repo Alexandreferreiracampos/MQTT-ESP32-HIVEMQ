@@ -1,15 +1,7 @@
 #include <ssl_client.h>
 #include <WiFiClientSecure.h>
-
-/*
- *  This sketch sends data via HTTP GET requests to data.sparkfun.com service.
- *
- *  You need to get streamId and privateKey at data.sparkfun.com and paste them
- *  below. Or just customize this script to talk to other HTTP servers.
- *
- */
-
 #include <PubSubClient.h>
+#include <HTTPClient.h>
 
 
 const char* ssid     = "Alexandre";
@@ -19,13 +11,21 @@ char mqtt_host[] = "";
 char clientid[] = "testeesp32";
 char username[] = "Smart-home";
 char passwd[] = "91906245";
-char topicname[] = "rele1";
-char topicsub[] = "relestat";
+char topicname[] = "smart-home";
+char topicsub[] = "smarthome";
 
 int led = 2;
 
 const int mqtt_port = 8883;
 
+hw_timer_t *timer = NULL;
+
+void IRAM_ATTR resetModule(){
+    ets_printf("(watchdog) reiniciar\n"); //imprime no log
+    ESP.restart(); //reinicia o chip
+}
+
+HTTPClient http;
 WiFiClientSecure clientmqtt;
 PubSubClient client(clientmqtt);
 
@@ -66,6 +66,8 @@ void setup()
     Serial.print("Connecting to ");
     Serial.println(ssid);
 
+  
+
     WiFi.begin(ssid, password);
 
     while (WiFi.status() != WL_CONNECTED) {
@@ -91,34 +93,94 @@ void setup()
           delay(2000);
           }
       }
-      client.publish(topicname, "teste mqtt");
+      
       client.subscribe(topicsub);
+
+      long tme = millis();
+
+    timer = timerBegin(0, 80, true); //timerID 0, div 80
+    //timer, callback, interrupção de borda
+    timerAttachInterrupt(timer, &resetModule, true);
+    //timer, tempo (us), repetição
+    timerAlarmWrite(timer, 15000000, true); //igual a 15 segundos
+    timerAlarmEnable(timer); //habilita a interrupção 
 }
 
+void smarthomeGet(String parametro){
+  
+      digitalWrite(led, HIGH);
+      http.begin("http://192.168.0."+parametro);
+      delay(80);
+      http.GET();
+      delay(80);
+      http.end();
+      timerWrite(timer, 0);
+      digitalWrite(led, LOW);
+      delay(80);
+      ESP.restart();
+  }
+
 void callback(char* topic, byte* payload, unsigned int length) {
+   
    Serial.print("Mensagem do Topic");
    Serial.println(topic);
    Serial.print("Message:");
    String message;
-   char* message2;
    for(int i = 0; i < length; i++){
-
-    message = message + (char) payload[i];
-    client.publish(topicname, message2);
     
+    message = message + (char) payload[i];
     }
-    if(message == "power"){
-      digitalWrite(led, !digitalRead(led));
-      if(digitalRead(led) == HIGH){
-        message2="led1:1";
-        }else{
-          message2="led1:0";
-          }
-      client.publish(topicname, message2);
-      }
+    
+    if(message == "luzSala"){
+        smarthomeGet("200/rele6");
+    }
+    if(message == "ledSala"){
+        smarthomeGet("200/rele5");
+    }
+    if(message == "luzGaragem"){
+        smarthomeGet("200/rele3");
+    }
+    if(message == "arandela"){
+        smarthomeGet("200/rele4");
+    }
+    if(message == "ledFachada"){
+        smarthomeGet("200/rele1");
+    }
+    if(message == "portao"){
+        smarthomeGet("200/relea");
+    }
+    if(message == "luzQuarto"){
+        smarthomeGet("100/rele4");
+    }
+    if(message == "LedQuarto"){
+        smarthomeGet("100/fade");
+    }
+    if(message == "luzCozinha"){
+        smarthomeGet("53/Controle?Rele1=on");
+    }
+    if(message == "luzGormet"){
+        smarthomeGet("200/relee");
+    }
+    if(message == "ledGormet"){
+        smarthomeGet("200/relef");
+    }
+    if(message == "arandelasInterior"){
+        smarthomeGet("200/releg");
+    }
+    if(message == "piscina"){
+        smarthomeGet("200/releh");
+    }
+    if(message == "som"){
+        smarthomeGet("200/relej");
+    }
+       
   }
 
 void loop()
 {
+   
+   Serial.print(".");
+   delay(200);
    client.loop();
+   timerWrite(timer, 0); //reseta o temporizador (alimenta o watchdog) 
 }
